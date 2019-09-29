@@ -15,7 +15,9 @@ use llvm_sys::core::LLVMIsOpaqueStruct;
 use llvm_sys::core::LLVMIsPackedStruct;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPrintTypeToString;
+use llvm_sys::core::LLVMStructCreateNamed;
 use llvm_sys::core::LLVMStructGetTypeAtIndex;
+use llvm_sys::core::LLVMStructSetBody;
 use llvm_sys::core::LLVMTypeIsSized;
 use llvm_sys::core::LLVMVectorType;
 use llvm::Context;
@@ -23,6 +25,7 @@ use llvm::Type;
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::marker::PhantomData;
+use std::mem;
 
 impl<'a> Type<'a> {
     /// Check if this type has a static size.
@@ -65,25 +68,43 @@ impl<'a> Type<'a> {
             LLVMGetArrayLength(self.ty)
         }
     }
-/*
+
     /// Create a function type.
-    fn func_type(args: &'a [Type<'a>], ret: Type<'a>) -> Type<'a> {
+    fn func_type(args: &[Type<'a>], ret: Type<'a>) -> Type<'a> {
+        let mut vec = Vec::with_capacity(args.len());
+
+        for arg in args {
+            vec.push(arg.ty);
+        }
+
         unsafe {
-            Type { ty: LLVMFunctionType(ret.ty, args.as_mut_ptr(),
-                                        args.len() as u32, 0),
+            let ptr = vec.as_mut_ptr();
+
+            mem::forget(vec);
+
+            Type { ty: LLVMFunctionType(ret.ty, ptr, args.len() as u32, 0),
                    phantom: PhantomData }
         }
     }
 
     /// Create a function type.
-    fn func_type_vararg(args: &'a [Type<'a>], ret: Type<'a>) -> Type<'a> {
+    fn func_type_vararg(args: &[Type<'a>], ret: Type<'a>) -> Type<'a> {
+        let mut vec = Vec::with_capacity(args.len());
+
+        for arg in args {
+            vec.push(arg.ty);
+        }
+
         unsafe {
-            Type { ty: LLVMFunctionType(ret.ty, args.as_mut_ptr(),
-                                        args.len() as u32, 1),
+            let ptr = vec.as_mut_ptr();
+
+            mem::forget(vec);
+
+            Type { ty: LLVMFunctionType(ret.ty, ptr, args.len() as u32, 1),
                    phantom: PhantomData }
         }
     }
-     */
+
     /// Check if a function type has variable arguments.
     pub fn is_function_vararg(&self) -> bool {
         unsafe {
@@ -102,6 +123,24 @@ impl<'a> Type<'a> {
     pub fn count_params(&self) -> u32 {
         unsafe {
             LLVMCountParamTypes(self.ty)
+        }
+    }
+
+    /// Get the param types for a function type.
+    pub fn param_types(&self) -> Vec<Type<'a>> {
+        unsafe {
+            let len = self.count_params() as usize;
+            let mut vec = Vec::with_capacity(len);
+
+            LLVMGetParamTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
+
+            let mut out = Vec::with_capacity(len);
+
+            for i in 0..len {
+                out.push(Type { ty: vec[i], phantom: PhantomData })
+            }
+
+            out
         }
     }
 
@@ -126,13 +165,13 @@ impl<'a> Type<'a> {
         }
     }
 
-    /// Get the param types for a function type.
-    pub fn param_types(&self) -> Vec<Type<'a>> {
+    /// Get the element types for a struct type.
+    pub fn struct_elem_types(&self) -> Vec<Type<'a>> {
         unsafe {
             let len = self.count_params() as usize;
             let mut vec = Vec::with_capacity(len);
 
-            LLVMGetParamTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
+            LLVMGetStructElementTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
 
             let mut out = Vec::with_capacity(len);
 
@@ -141,6 +180,49 @@ impl<'a> Type<'a> {
             }
 
             out
+        }
+    }
+
+    /// Set the body of a struct.
+    fn struct_set_body(&mut self, elems: &[Type<'a>]) {
+        let len = elems.len();
+        let mut vec = Vec::with_capacity(len);
+
+        for elem in elems {
+            vec.push(elem.ty);
+        }
+
+        unsafe {
+            let ptr = vec.as_mut_ptr();
+
+            mem::forget(vec);
+
+            LLVMStructSetBody(self.ty, ptr, len as u32, 0)
+        }
+    }
+
+    /// Set the body of a struct.
+    fn struct_set_body_packed(&mut self, elems: &[Type<'a>]) {
+        let len = elems.len();
+        let mut vec = Vec::with_capacity(len);
+
+        for elem in elems {
+            vec.push(elem.ty);
+        }
+
+        unsafe {
+            let ptr = vec.as_mut_ptr();
+
+            mem::forget(vec);
+
+            LLVMStructSetBody(self.ty, ptr, len as u32, 1)
+        }
+    }
+
+    pub fn struct_type_at_idx(&self, idx: u32) -> Type<'a> {
+        unsafe {
+            Type { ty: LLVMStructGetTypeAtIndex(self.ty, idx),
+                   phantom: PhantomData }
         }
     }
 
@@ -165,28 +247,10 @@ impl<'a> Type<'a> {
         }
     }
 
-    /// Get the element types for a struct type.
-    pub fn struct_elem_types(&self) -> Vec<Type<'a>> {
+    /// Create an array type with this type as the elements.
+    pub fn vector_type(&self, count: u32) -> Type<'a> {
         unsafe {
-            let len = self.count_params() as usize;
-            let mut vec = Vec::with_capacity(len);
-
-            LLVMGetStructElementTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
-
-            let mut out = Vec::with_capacity(len);
-
-            for i in 0..len {
-                out.push(Type { ty: vec[i], phantom: PhantomData })
-            }
-
-            out
-        }
-    }
-
-    pub fn struct_type_at_idx(&self, idx: u32) -> Type<'a> {
-        unsafe {
-            Type { ty: LLVMStructGetTypeAtIndex(self.ty, idx),
-                   phantom: PhantomData }
+            Type { ty: LLVMVectorType(self.ty, count), phantom: PhantomData }
         }
     }
 

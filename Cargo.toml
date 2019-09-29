@@ -5,4 +5,4 @@ authors = ["Eric McCorkle <eric@metricspace.net>"]
 
 [dependencies]
 libc = { version = "*" }
-llvm-sys = { version = "80", git = "https://github.com/tari/llvm-sys.rs.git", branch = "master" }
+llvm-sys = { version = "80" }
