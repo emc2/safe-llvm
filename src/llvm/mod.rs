@@ -1,7 +1,9 @@
 use llvm_sys::core::LLVMContextCreate;
 use llvm_sys::core::LLVMCreateBuilder;
+use llvm_sys::core::LLVMCreatePassManager;
 use llvm_sys::core::LLVMCreateMessage;
 use llvm_sys::core::LLVMDisposeBuilder;
+use llvm_sys::core::LLVMDisposePassManager;
 use llvm_sys::core::LLVMDisposeMessage;
 use llvm_sys::core::LLVMDoubleType;
 use llvm_sys::core::LLVMFP128Type;
@@ -29,6 +31,7 @@ use llvm_sys::prelude::LLVMBuilderRef;
 use llvm_sys::prelude::LLVMBasicBlockRef;
 use llvm_sys::prelude::LLVMContextRef;
 use llvm_sys::prelude::LLVMModuleRef;
+use llvm_sys::prelude::LLVMPassManagerRef;
 use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::prelude::LLVMValueRef;
 use std::borrow::Cow;
@@ -70,6 +73,11 @@ pub struct Context<'a> {
     phantom: PhantomData<&'a LLVMContextRef>
 }
 
+pub struct PassManager<'a> {
+    pass_mgr: LLVMPassManagerRef,
+    phantom: PhantomData<&'a LLVMPassManagerRef>
+}
+
 pub struct Message<'a> {
     msg: *mut ::libc::c_char,
     phantom: PhantomData<&'a *mut ::libc::c_char>
@@ -85,6 +93,7 @@ pub struct Module<'a> {
     phantom: PhantomData<&'a LLVMModuleRef>
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Type<'a> {
     ty: LLVMTypeRef,
     phantom: PhantomData<&'a LLVMTypeRef>
@@ -119,11 +128,11 @@ pub trait ContextOps<'a> {
     fn void_type(&self) -> Type<'a>;
     fn label_type(&self) -> Type<'a>;
     fn x86_mmx_type(&self) -> Type<'a>;
-    fn struct_type(&self, elems: &[&Type<'a>]) -> Type<'a>;
-    fn packed_struct_type(&self, elems: &[&Type<'a>]) -> Type<'a>;
+    fn struct_type(&self, elems: &[Type<'a>]) -> Type<'a>;
+    fn packed_struct_type(&self, elems: &[Type<'a>]) -> Type<'a>;
 }
 
-impl<'a, 'b: 'a> LLVM<'a> {
+impl<'a> LLVM<'a> {
     /// Run `func` with an `LLVM` handle.
     pub fn with_llvm<F, T, U>(func: F, arg: T) -> U
         where F: FnOnce(&mut LLVM<'a>, T) -> U {
@@ -132,7 +141,7 @@ impl<'a, 'b: 'a> LLVM<'a> {
         func(&mut llvm, arg)
     }
 
-    pub fn ctx(&mut self) -> Context<'b> {
+    pub fn ctx<'b: 'a>(&mut self) -> Context<'b> {
         unsafe {
             Context { ctx: LLVMContextCreate(), dispose: true,
                       phantom: PhantomData }
@@ -146,7 +155,7 @@ impl<'a, 'b: 'a> LLVM<'a> {
         }
     }
 
-    pub fn create_msg(&mut self, s: &str) -> Message<'b> {
+    pub fn create_msg<'b: 'a>(&mut self, s: &str) -> Message<'b> {
         unsafe {
             let cstr = CString::new(s);
 
@@ -154,9 +163,16 @@ impl<'a, 'b: 'a> LLVM<'a> {
                       phantom: PhantomData }
         }
     }
+
+    pub fn create_pass_mgr<'b: 'a>(&self) -> PassManager<'b> {
+        unsafe {
+            PassManager { pass_mgr: LLVMCreatePassManager(),
+                          phantom: PhantomData }
+        }
+    }
 }
 
-impl<'a, 'b> ContextOps<'b> for LLVM<'a> {
+impl<'a, 'b: 'a> ContextOps<'b> for LLVM<'a> {
     fn md_kind_id(&mut self, name: &str) -> MDKindID<'b> {
         unsafe {
             let vec: Vec<u8> = name.into();
@@ -290,7 +306,7 @@ impl<'a, 'b> ContextOps<'b> for LLVM<'a> {
     }
 
     /// Create a function type.
-    fn struct_type(&self, elems: &[&Type<'b>]) -> Type<'b> {
+    fn struct_type(&self, elems: &[Type<'b>]) -> Type<'b> {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -309,7 +325,7 @@ impl<'a, 'b> ContextOps<'b> for LLVM<'a> {
     }
 
     /// Create a function type.
-    fn packed_struct_type(&self, elems: &[&Type<'b>]) -> Type<'b> {
+    fn packed_struct_type(&self, elems: &[Type<'b>]) -> Type<'b> {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -354,10 +370,19 @@ impl<'a> Drop for Builder<'a> {
     }
 }
 
+/*
 impl<'a> Drop for LLVM<'a> {
     fn drop(&mut self) {
         unsafe {
-            LLVMShutdown();
+            //LLVMShutdown();
+        }
+    }
+}
+*/
+impl<'a> Drop for PassManager<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            LLVMDisposePassManager(self.pass_mgr)
         }
     }
 }
@@ -385,14 +410,24 @@ fn test_with_llvm() {
 
 #[test]
 fn test_ctx() {
-    let res = LLVM::with_llvm(|llvm, x| { let _ctx = llvm.ctx(); x }, 0);
+    let res = LLVM::with_llvm(
+        |llvm, x| {
+            let _ctx = llvm.ctx();
+
+            x
+        }, 0);
 
     assert_eq!(0, res)
 }
 
 #[test]
 fn test_global_ctx() {
-    let res = LLVM::with_llvm(|llvm, x| { let _ctx = llvm.global_ctx(); x }, 0);
+    let res = LLVM::with_llvm(
+        |llvm, x| {
+            let _ctx = llvm.global_ctx();
+
+            x
+        }, 0);
 
     assert_eq!(0, res)
 }
@@ -404,4 +439,171 @@ fn test_message() {
         msg.to_string() }, 0);
 
     assert_eq!("test", res)
+}
+
+#[test]
+fn test_int1() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int1_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int8() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int8_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int16() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int16_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int32() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int32_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int64() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int64_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int128_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.int_type(256);
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_half() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.half_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_float() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.float_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_double() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.double_type();
+
+            assert_eq!(true, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_f128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.f128_type();
+
+            assert_eq!(true, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_x86_fp80() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.x86_fp80_type();
+
+            assert_eq!(true, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_ppc_fp128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.ppc_fp128_type();
+
+            assert_eq!(true, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_void() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.void_type();
+
+            assert_eq!(false, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_label() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.label_type();
+
+            assert_eq!(false, ty.is_sized());
+
+        }, 0);
+}
+
+#[test]
+fn test_x86_mmx() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ty = llvm.x86_mmx_type();
+
+            assert_eq!(true, ty.is_sized());
+
+        }, 0);
 }

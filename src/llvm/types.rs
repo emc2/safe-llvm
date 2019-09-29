@@ -4,6 +4,7 @@ use llvm_sys::core::LLVMCountStructElementTypes;
 use llvm_sys::core::LLVMGetArrayLength;
 use llvm_sys::core::LLVMContextCreate;
 use llvm_sys::core::LLVMFunctionType;
+use llvm_sys::core::LLVMGetElementType;
 use llvm_sys::core::LLVMGetTypeContext;
 use llvm_sys::core::LLVMGetParamTypes;
 use llvm_sys::core::LLVMGetPointerAddressSpace;
@@ -24,8 +25,13 @@ use llvm::Context;
 use llvm::Type;
 use std::borrow::Cow;
 use std::ffi::CStr;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result;
 use std::marker::PhantomData;
 use std::mem;
+use std::ptr::null_mut;
 
 impl<'a> Type<'a> {
     /// Check if this type has a static size.
@@ -56,7 +62,7 @@ impl<'a> Type<'a> {
     }
 
     /// Create an array type with this type as the elements.
-    pub fn array_type(&self, count: u32) -> Type<'a> {
+    pub fn array(&self, count: u32) -> Type<'a> {
         unsafe {
             Type { ty: LLVMArrayType(self.ty, count), phantom: PhantomData }
         }
@@ -66,6 +72,13 @@ impl<'a> Type<'a> {
     pub fn array_len(&self) -> u32 {
         unsafe {
             LLVMGetArrayLength(self.ty)
+        }
+    }
+
+    /// Get a function's return type.
+    pub fn elem_type(&self) -> Type<'a> {
+        unsafe {
+            Type { ty: LLVMGetElementType(self.ty), phantom: PhantomData }
         }
     }
 
@@ -106,7 +119,7 @@ impl<'a> Type<'a> {
     }
 
     /// Check if a function type has variable arguments.
-    pub fn is_function_vararg(&self) -> bool {
+    pub fn is_vararg(&self) -> bool {
         unsafe {
             LLVMIsFunctionVarArg(self.ty) != 0
         }
@@ -120,7 +133,7 @@ impl<'a> Type<'a> {
     }
 
     /// Get a function's return type.
-    pub fn count_params(&self) -> u32 {
+    pub fn num_params(&self) -> u32 {
         unsafe {
             LLVMCountParamTypes(self.ty)
         }
@@ -129,8 +142,12 @@ impl<'a> Type<'a> {
     /// Get the param types for a function type.
     pub fn param_types(&self) -> Vec<Type<'a>> {
         unsafe {
-            let len = self.count_params() as usize;
+            let len = self.num_params() as usize;
             let mut vec = Vec::with_capacity(len);
+
+            for _ in 0..len {
+                vec.push(null_mut());
+            }
 
             LLVMGetParamTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
 
@@ -144,8 +161,8 @@ impl<'a> Type<'a> {
         }
     }
 
-    /// Get a function's return type.
-    pub fn count_struct_elems(&self) -> u32 {
+    /// Get the number of structure elements.
+    pub fn num_struct_elems(&self) -> u32 {
         unsafe {
             LLVMCountStructElementTypes(self.ty)
         }
@@ -168,8 +185,12 @@ impl<'a> Type<'a> {
     /// Get the element types for a struct type.
     pub fn struct_elem_types(&self) -> Vec<Type<'a>> {
         unsafe {
-            let len = self.count_params() as usize;
+            let len = self.num_struct_elems() as usize;
             let mut vec = Vec::with_capacity(len);
+
+            for _ in 0..len {
+                vec.push(null_mut());
+            }
 
             LLVMGetStructElementTypes(self.ty, vec.as_mut_slice().as_mut_ptr());
 
@@ -184,7 +205,7 @@ impl<'a> Type<'a> {
     }
 
     /// Set the body of a struct.
-    fn struct_set_body(&mut self, elems: &[Type<'a>]) {
+    pub fn struct_set_body(&mut self, elems: &[Type<'a>]) {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -202,7 +223,7 @@ impl<'a> Type<'a> {
     }
 
     /// Set the body of a struct.
-    fn struct_set_body_packed(&mut self, elems: &[Type<'a>]) {
+    pub fn struct_set_body_packed(&mut self, elems: &[Type<'a>]) {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -227,7 +248,7 @@ impl<'a> Type<'a> {
     }
 
     /// Create a pointer type with this type as the base type.
-    pub fn ptr_type(&self) -> Type<'a> {
+    pub fn ptr(&self) -> Type<'a> {
         unsafe {
             Type { ty: LLVMPointerType(self.ty, 0), phantom: PhantomData }
         }
@@ -241,14 +262,14 @@ impl<'a> Type<'a> {
     }
 
     /// Create a pointer type with this type as the base type.
-    pub fn ptr_type_with_addrspc(&self, addrspc: u32) -> Type<'a> {
+    pub fn ptr_with_addrspc(&self, addrspc: u32) -> Type<'a> {
         unsafe {
             Type { ty: LLVMPointerType(self.ty, addrspc), phantom: PhantomData }
         }
     }
 
     /// Create an array type with this type as the elements.
-    pub fn vector_type(&self, count: u32) -> Type<'a> {
+    pub fn vector(&self, count: u32) -> Type<'a> {
         unsafe {
             Type { ty: LLVMVectorType(self.ty, count), phantom: PhantomData }
         }
@@ -260,4 +281,114 @@ impl<'a> Type<'a> {
             LLVMGetVectorSize(self.ty)
         }
     }
+}
+
+impl<'a> Display for Type<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}", self.to_str())
+    }
+}
+
+impl<'a> Debug for Type<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}", self.to_str())
+    }
+}
+
+#[cfg(test)]
+use llvm::LLVM;
+#[cfg(test)]
+use llvm::ContextOps;
+
+#[test]
+fn test_array_int8() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elemty = ctx.int8_type();
+            let arrty = elemty.array(8);
+
+            assert_eq!(8, arrty.array_len());
+            assert_eq!(elemty, arrty.elem_type());
+            assert_eq!(true, arrty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_vector_int8() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elemty = ctx.int8_type();
+            let vecty = elemty.vector(8);
+
+            assert_eq!(8, vecty.vector_size());
+            assert_eq!(elemty, vecty.elem_type());
+            assert_eq!(true, vecty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_ptr_int8() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elemty = ctx.int8_type();
+            let ptrty = elemty.ptr();
+
+            assert_eq!(elemty, ptrty.elem_type());
+            assert_eq!(true, ptrty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_ptr_int8_with_addrspc() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elemty = ctx.int8_type();
+            let ptrty = elemty.ptr_with_addrspc(2);
+
+            assert_eq!(2, ptrty.ptr_addrspc());
+            assert_eq!(elemty, ptrty.elem_type());
+            assert_eq!(true, ptrty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_func() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let arg1ty = ctx.int8_type();
+            let arg2ty = ctx.float_type();
+            let retty = arg1ty.ptr();
+            let params = [arg1ty, arg2ty];
+            let functy = Type::func_type(&params, retty);
+
+            assert_eq!(retty, functy.return_type());
+            assert_eq!(2, functy.num_params());
+            assert_eq!(vec![arg1ty, arg2ty], functy.param_types());
+            assert_eq!(false, functy.is_sized());
+            assert_eq!(false, functy.is_vararg());
+        }, 0);
+}
+
+#[test]
+fn test_vararg_func() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let arg1ty = ctx.int8_type();
+            let arg2ty = ctx.float_type();
+            let retty = arg1ty.ptr();
+            let params = [arg1ty, arg2ty];
+            let functy = Type::func_type_vararg(&params, retty);
+
+            assert_eq!(retty, functy.return_type());
+            assert_eq!(2, functy.num_params());
+            assert_eq!(vec![arg1ty, arg2ty], functy.param_types());
+            assert_eq!(false, functy.is_sized());
+            assert_eq!(true, functy.is_vararg());
+        }, 0);
 }

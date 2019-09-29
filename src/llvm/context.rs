@@ -206,7 +206,7 @@ impl<'a, 'b: 'a> ContextOps<'b> for Context<'a> {
     }
 
     /// Create a function type.
-    fn struct_type(&self, elems: &[&Type<'b>]) -> Type<'b> {
+    fn struct_type(&self, elems: &[Type<'b>]) -> Type<'b> {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -225,7 +225,7 @@ impl<'a, 'b: 'a> ContextOps<'b> for Context<'a> {
     }
 
     /// Create a function type.
-    fn packed_struct_type(&self, elems: &[&Type<'b>]) -> Type<'b> {
+    fn packed_struct_type(&self, elems: &[Type<'b>]) -> Type<'b> {
         let len = elems.len();
         let mut vec = Vec::with_capacity(len);
 
@@ -252,4 +252,294 @@ impl<'a> Drop for Context<'a> {
             }
         }
     }
+}
+
+#[cfg(test)]
+use llvm::LLVM;
+
+#[test]
+fn test_int1() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int1_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int8() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int8_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int16() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int16_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int32() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int32_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int64() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int64_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int128_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_int() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.int_type(256);
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_half() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.half_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_float() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.float_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_double() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.double_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_f128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.f128_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_x86_fp80() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.x86_fp80_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_ppc_fp128() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.ppc_fp128_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_void() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.void_type();
+
+            assert_eq!(false, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_label() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.label_type();
+
+            assert_eq!(false, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_x86_mmx() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.x86_mmx_type();
+
+            assert_eq!(true, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_token() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.token_type();
+
+            assert_eq!(false, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_metadata() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let ty = ctx.metadata_type();
+
+            assert_eq!(false, ty.is_sized());
+        }, 0);
+}
+
+#[test]
+fn test_struct() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elem1ty = ctx.int8_type();
+            let elem2ty = ctx.float_type();
+            let elems = [elem1ty, elem2ty];
+            let structty = ctx.struct_type(&elems);
+
+            assert_eq!(2, structty.num_struct_elems());
+            assert_eq!(vec![elem1ty, elem2ty], structty.struct_elem_types());
+            assert_eq!(true, structty.is_sized());
+            assert_eq!(false, structty.is_opaque_struct());
+            assert_eq!(false, structty.is_packed_struct());
+        }, 0);
+}
+
+#[test]
+fn test_packed_struct() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let ctx = llvm.ctx();
+            let elem1ty = ctx.int8_type();
+            let elem2ty = ctx.float_type();
+            let elems = [elem1ty, elem2ty];
+            let structty = ctx.packed_struct_type(&elems);
+
+            println!("{}", structty);
+            assert_eq!(2, structty.num_struct_elems());
+            assert_eq!(vec![elem1ty, elem2ty], structty.struct_elem_types());
+            assert_eq!(true, structty.is_sized());
+            assert_eq!(false, structty.is_opaque_struct());
+            assert_eq!(true, structty.is_packed_struct());
+        }, 0);
+}
+
+#[test]
+fn test_named_struct() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let mut ctx = llvm.ctx();
+            let elem1ty = ctx.int8_type();
+            let elem2ty = ctx.float_type();
+            let elems = [elem1ty, elem2ty];
+            let emptyelems: Vec<Type> = vec![];
+            let mut structty = ctx.named_struct("test");
+
+            assert_eq!(0, structty.num_struct_elems());
+            assert_eq!(emptyelems, structty.struct_elem_types());
+            assert_eq!(false, structty.is_sized());
+            assert_eq!(true, structty.is_opaque_struct());
+            assert_eq!(false, structty.is_packed_struct());
+
+            structty.struct_set_body(&elems);
+            assert_eq!(2, structty.num_struct_elems());
+            assert_eq!(vec![elem1ty, elem2ty], structty.struct_elem_types());
+            assert_eq!(true, structty.is_sized());
+            assert_eq!(false, structty.is_opaque_struct());
+            assert_eq!(false, structty.is_packed_struct());
+        }, 0);
+}
+
+#[test]
+fn test_named_packed_struct() {
+    LLVM::with_llvm(
+        |llvm, _x| {
+            let mut ctx = llvm.ctx();
+            let elem1ty = ctx.int8_type();
+            let elem2ty = ctx.float_type();
+            let elems = [elem1ty, elem2ty];
+            let emptyelems: Vec<Type> = vec![];
+            let mut structty = ctx.named_struct("test");
+
+            assert_eq!(0, structty.num_struct_elems());
+            assert_eq!(emptyelems, structty.struct_elem_types());
+            assert_eq!(false, structty.is_sized());
+            assert_eq!(true, structty.is_opaque_struct());
+            assert_eq!(false, structty.is_packed_struct());
+
+            structty.struct_set_body_packed(&elems);
+            assert_eq!(2, structty.num_struct_elems());
+            assert_eq!(vec![elem1ty, elem2ty], structty.struct_elem_types());
+            assert_eq!(true, structty.is_sized());
+            assert_eq!(false, structty.is_opaque_struct());
+            assert_eq!(true, structty.is_packed_struct());
+        }, 0);
 }
